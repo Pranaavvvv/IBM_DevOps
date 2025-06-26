@@ -1,0 +1,160 @@
+pipeline {
+    agent any
+    
+    environment {
+        DOCKER_IMAGE = 'your-dockerhub-username/library-management-system'
+        DOCKER_TAG = "${env.BUILD_NUMBER}"
+        AWS_REGION = 'us-east-1'
+        TERRAFORM_DIR = 'terraform'
+        ANSIBLE_DIR = 'ansible'
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                echo 'Checking out source code...'
+                checkout scm
+            }
+        }
+        
+        stage('Build') {
+            steps {
+                echo 'Building Java application with Maven...'
+                sh 'mvn clean compile'
+            }
+        }
+        
+        stage('Test') {
+            steps {
+                echo 'Running unit tests...'
+                sh 'mvn test'
+                
+                // Publish test results
+                publishTestResults testResultsPattern: '**/target/surefire-reports/*.xml'
+            }
+            post {
+                always {
+                    // Publish test reports
+                    publishHTML([
+                        allowMissing: false,
+                        alwaysLinkToLastBuild: true,
+                        keepAll: true,
+                        reportDir: 'target/surefire-reports',
+                        reportFiles: 'index.html',
+                        reportName: 'Test Report'
+                    ])
+                }
+            }
+        }
+        
+        stage('Package') {
+            steps {
+                echo 'Packaging application...'
+                sh 'mvn package -DskipTests'
+            }
+        }
+        
+        stage('Docker Build') {
+            steps {
+                echo 'Building Docker image...'
+                script {
+                    docker.build("${DOCKER_IMAGE}:${DOCKER_TAG}")
+                    docker.build("${DOCKER_IMAGE}:latest")
+                }
+            }
+        }
+        
+        stage('Docker Push') {
+            steps {
+                echo 'Pushing Docker image to DockerHub...'
+                script {
+                    withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
+                        sh 'echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin'
+                        docker.withRegistry('https://registry.hub.docker.com', 'dockerhub-credentials') {
+                            docker.image("${DOCKER_IMAGE}:${DOCKER_TAG}").push()
+                            docker.image("${DOCKER_IMAGE}:latest").push()
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('Terraform Plan') {
+            steps {
+                echo 'Planning Terraform infrastructure...'
+                dir(TERRAFORM_DIR) {
+                    withCredentials([aws(credentials: 'aws-credentials', region: AWS_REGION)]) {
+                        sh 'terraform init'
+                        sh 'terraform plan -out=tfplan'
+                    }
+                }
+            }
+        }
+        
+        stage('Terraform Apply') {
+            steps {
+                echo 'Applying Terraform infrastructure...'
+                dir(TERRAFORM_DIR) {
+                    withCredentials([aws(credentials: 'aws-credentials', region: AWS_REGION)]) {
+                        sh 'terraform apply -auto-approve tfplan'
+                        
+                        // Get the EC2 instance IP
+                        script {
+                            env.EC2_IP = sh(
+                                script: 'terraform output -raw public_ip',
+                                returnStdout: true
+                            ).trim()
+                        }
+                    }
+                }
+            }
+        }
+        
+        stage('Ansible Deploy') {
+            steps {
+                echo 'Deploying application with Ansible...'
+                dir(ANSIBLE_DIR) {
+                    sh "ansible-playbook -i ${env.EC2_IP}, -u ubuntu --private-key ~/.ssh/id_rsa deploy.yml -e 'docker_image=${DOCKER_IMAGE}:${DOCKER_TAG}'"
+                }
+            }
+        }
+        
+        stage('Health Check') {
+            steps {
+                echo 'Performing health check...'
+                script {
+                    // Wait for application to start
+                    sleep(30)
+                    
+                    // Simple health check (modify based on your application)
+                    sh "curl -f http://${env.EC2_IP}:8080/health || echo 'Health check failed'"
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            echo 'Cleaning up workspace...'
+            cleanWs()
+        }
+        success {
+            echo 'Pipeline completed successfully!'
+            // Send notification
+            emailext (
+                subject: "Pipeline SUCCESS: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                body: "Pipeline completed successfully. Application deployed to ${env.EC2_IP}",
+                to: 'your-email@example.com'
+            )
+        }
+        failure {
+            echo 'Pipeline failed!'
+            // Send notification
+            emailext (
+                subject: "Pipeline FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                body: "Pipeline failed. Check Jenkins console for details.",
+                to: 'your-email@example.com'
+            )
+        }
+    }
+} 

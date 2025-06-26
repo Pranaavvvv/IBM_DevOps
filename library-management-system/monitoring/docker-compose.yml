@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  # Graphite
+  graphite:
+    image: graphiteapp/graphite-statsd:latest
+    container_name: graphite
+    ports:
+      - "2003:2003"  # Carbon plaintext protocol
+      - "2004:2004"  # Carbon pickle protocol
+      - "8080:80"    # Graphite web interface
+    volumes:
+      - graphite_data:/opt/graphite/storage
+      - ./graphite/conf/graphite.conf:/opt/graphite/conf/graphite.conf
+      - ./graphite/conf/storage-schemas.conf:/opt/graphite/conf/storage-schemas.conf
+    environment:
+      - GRAPHITE_TIME_ZONE=UTC
+    networks:
+      - monitoring
+
+  # Grafana
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    networks:
+      - monitoring
+    depends_on:
+      - graphite
+
+  # StatsD (optional, for additional metrics)
+  statsd:
+    image: graphiteapp/graphite-statsd:latest
+    container_name: statsd
+    ports:
+      - "8125:8125/udp"  # StatsD UDP
+      - "8126:8126"      # StatsD TCP
+    volumes:
+      - ./statsd/config.js:/opt/statsd/config.js
+    networks:
+      - monitoring
+    depends_on:
+      - graphite
+
+volumes:
+  graphite_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+networks:
+  monitoring:
+    driver: bridge 

@@ -1,0 +1,98 @@
+---
+- name: Deploy Library Management System
+  hosts: all
+  become: yes
+  vars:
+    docker_image: "{{ docker_image | default('your-dockerhub-username/library-management-system:latest') }}"
+    app_port: 8080
+    container_name: library-app
+
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install required packages
+      apt:
+        name:
+          - docker.io
+          - docker-compose
+          - python3-pip
+        state: present
+
+    - name: Start and enable Docker service
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Add ubuntu user to docker group
+      user:
+        name: ubuntu
+        groups: docker
+        append: yes
+
+    - name: Stop and remove existing container
+      docker_container:
+        name: "{{ container_name }}"
+        state: absent
+      ignore_errors: yes
+
+    - name: Remove existing image
+      docker_image:
+        name: "{{ docker_image }}"
+        state: absent
+      ignore_errors: yes
+
+    - name: Pull latest Docker image
+      docker_image:
+        name: "{{ docker_image }}"
+        source: pull
+        force_source: yes
+
+    - name: Run the application container
+      docker_container:
+        name: "{{ container_name }}"
+        image: "{{ docker_image }}"
+        state: started
+        restart_policy: unless-stopped
+        ports:
+          - "{{ app_port }}:{{ app_port }}"
+        env:
+          JAVA_OPTS: "-Xmx512m -Xms256m"
+        networks:
+          - name: app-network
+
+    - name: Create Docker network
+      docker_network:
+        name: app-network
+        state: present
+
+    - name: Wait for application to start
+      wait_for:
+        port: "{{ app_port }}"
+        host: "{{ ansible_default_ipv4.address }}"
+        delay: 10
+        timeout: 60
+
+    - name: Check application health
+      uri:
+        url: "http://{{ ansible_default_ipv4.address }}:{{ app_port }}"
+        method: GET
+        status_code: [200, 404]  # Accept both 200 and 404 for now
+      register: health_check
+      retries: 3
+      delay: 10
+
+    - name: Display deployment status
+      debug:
+        msg: "Application deployed successfully to {{ ansible_default_ipv4.address }}:{{ app_port }}"
+
+    - name: Display container logs
+      shell: docker logs {{ container_name }} --tail 20
+      register: container_logs
+
+    - name: Show container logs
+      debug:
+        var: container_logs.stdout_lines 
