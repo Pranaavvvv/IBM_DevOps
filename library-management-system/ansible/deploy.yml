@@ -1,37 +1,24 @@
 ---
-- name: Deploy Library Management System
+- name: Deploy Library Management System (Spring Boot)
   hosts: all
   become: yes
   vars:
-    docker_image: "{{ docker_image | default('your-dockerhub-username/library-management-system:latest') }}"
+    docker_image: "{{ docker_image | default('library-management-system:latest') }}"
     app_port: 8080
     container_name: library-app
 
   tasks:
-    - name: Update apt cache
+    - name: Ensure Docker is installed
       apt:
-        update_cache: yes
-        cache_valid_time: 3600
-
-    - name: Install required packages
-      apt:
-        name:
-          - docker.io
-          - docker-compose
-          - python3-pip
+        name: docker.io
         state: present
+        update_cache: yes
 
-    - name: Start and enable Docker service
+    - name: Start Docker service
       systemd:
         name: docker
         state: started
         enabled: yes
-
-    - name: Add ubuntu user to docker group
-      user:
-        name: ubuntu
-        groups: docker
-        append: yes
 
     - name: Stop and remove existing container
       docker_container:
@@ -58,36 +45,28 @@
         state: started
         restart_policy: unless-stopped
         ports:
-          - "{{ app_port }}:{{ app_port }}"
+          - "{{ app_port }}:8080"
         env:
           JAVA_OPTS: "-Xmx512m -Xms256m"
-        networks:
-          - name: app-network
-
-    - name: Create Docker network
-      docker_network:
-        name: app-network
-        state: present
 
     - name: Wait for application to start
       wait_for:
         port: "{{ app_port }}"
-        host: "{{ ansible_default_ipv4.address }}"
-        delay: 10
+        delay: 5
         timeout: 60
 
     - name: Check application health
       uri:
-        url: "http://{{ ansible_default_ipv4.address }}:{{ app_port }}"
+        url: "http://localhost:{{ app_port }}/books"
         method: GET
-        status_code: [200, 404]  # Accept both 200 and 404 for now
+        status_code: 200
       register: health_check
       retries: 3
-      delay: 10
+      delay: 5
 
     - name: Display deployment status
       debug:
-        msg: "Application deployed successfully to {{ ansible_default_ipv4.address }}:{{ app_port }}"
+        msg: "Application deployed successfully to http://localhost:{{ app_port }}"
 
     - name: Display container logs
       shell: docker logs {{ container_name }} --tail 20

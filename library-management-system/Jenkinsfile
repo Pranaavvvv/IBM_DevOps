@@ -2,11 +2,9 @@ pipeline {
     agent any
     
     environment {
-        DOCKER_IMAGE = 'your-dockerhub-username/library-management-system'
+        DOCKER_IMAGE = 'library-management-system'
         DOCKER_TAG = "${env.BUILD_NUMBER}"
-        AWS_REGION = 'us-east-1'
-        TERRAFORM_DIR = 'terraform'
-        ANSIBLE_DIR = 'ansible'
+        LOCAL_PORT = '8080'
     }
     
     stages {
@@ -19,30 +17,19 @@ pipeline {
         
         stage('Build') {
             steps {
-                echo 'Building Java application with Maven...'
+                echo 'Building Spring Boot application with Maven...'
                 sh 'mvn clean compile'
             }
         }
         
         stage('Test') {
             steps {
-                echo 'Running unit tests...'
+                echo 'Running unit and integration tests...'
                 sh 'mvn test'
-                
-                // Publish test results
-                publishTestResults testResultsPattern: '**/target/surefire-reports/*.xml'
             }
             post {
                 always {
-                    // Publish test reports
-                    publishHTML([
-                        allowMissing: false,
-                        alwaysLinkToLastBuild: true,
-                        keepAll: true,
-                        reportDir: 'target/surefire-reports',
-                        reportFiles: 'index.html',
-                        reportName: 'Test Report'
-                    ])
+                    junit '**/target/surefire-reports/*.xml'
                 }
             }
         }
@@ -64,58 +51,23 @@ pipeline {
             }
         }
         
-        stage('Docker Push') {
+        stage('Stop Previous Container') {
             steps {
-                echo 'Pushing Docker image to DockerHub...'
-                script {
-                    withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
-                        sh 'echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin'
-                        docker.withRegistry('https://registry.hub.docker.com', 'dockerhub-credentials') {
-                            docker.image("${DOCKER_IMAGE}:${DOCKER_TAG}").push()
-                            docker.image("${DOCKER_IMAGE}:latest").push()
-                        }
-                    }
-                }
+                echo 'Stopping previous container if exists...'
+                sh '''
+                    docker stop library-app || true
+                    docker rm library-app || true
+                '''
             }
         }
         
-        stage('Terraform Plan') {
+        stage('Deploy Locally') {
             steps {
-                echo 'Planning Terraform infrastructure...'
-                dir(TERRAFORM_DIR) {
-                    withCredentials([aws(credentials: 'aws-credentials', region: AWS_REGION)]) {
-                        sh 'terraform init'
-                        sh 'terraform plan -out=tfplan'
-                    }
-                }
-            }
-        }
-        
-        stage('Terraform Apply') {
-            steps {
-                echo 'Applying Terraform infrastructure...'
-                dir(TERRAFORM_DIR) {
-                    withCredentials([aws(credentials: 'aws-credentials', region: AWS_REGION)]) {
-                        sh 'terraform apply -auto-approve tfplan'
-                        
-                        // Get the EC2 instance IP
-                        script {
-                            env.EC2_IP = sh(
-                                script: 'terraform output -raw public_ip',
-                                returnStdout: true
-                            ).trim()
-                        }
-                    }
-                }
-            }
-        }
-        
-        stage('Ansible Deploy') {
-            steps {
-                echo 'Deploying application with Ansible...'
-                dir(ANSIBLE_DIR) {
-                    sh "ansible-playbook -i ${env.EC2_IP}, -u ubuntu --private-key ~/.ssh/id_rsa deploy.yml -e 'docker_image=${DOCKER_IMAGE}:${DOCKER_TAG}'"
-                }
+                echo 'Deploying application locally...'
+                sh '''
+                    docker run -d --name library-app -p ${LOCAL_PORT}:8080 ${DOCKER_IMAGE}:${DOCKER_TAG}
+                    echo "Application deployed to http://localhost:${LOCAL_PORT}"
+                '''
             }
         }
         
@@ -123,12 +75,23 @@ pipeline {
             steps {
                 echo 'Performing health check...'
                 script {
-                    // Wait for application to start
-                    sleep(30)
-                    
-                    // Simple health check (modify based on your application)
-                    sh "curl -f http://${env.EC2_IP}:8080/health || echo 'Health check failed'"
+                    sleep(10)
+                    sh '''
+                        curl -f http://localhost:${LOCAL_PORT}/books || (echo "Health check failed" && exit 1)
+                    '''
                 }
+            }
+        }
+        
+        stage('Start Monitoring') {
+            steps {
+                echo 'Starting monitoring stack...'
+                dir('monitoring') {
+                    sh 'docker-compose up -d'
+                }
+                echo 'Monitoring stack started:'
+                echo '- Grafana: http://localhost:3000 (admin/admin)'
+                echo '- Graphite: http://localhost:8080'
             }
         }
     }
@@ -140,21 +103,13 @@ pipeline {
         }
         success {
             echo 'Pipeline completed successfully!'
-            // Send notification
-            emailext (
-                subject: "Pipeline SUCCESS: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                body: "Pipeline completed successfully. Application deployed to ${env.EC2_IP}",
-                to: 'your-email@example.com'
-            )
+            echo 'Application is running at: http://localhost:8080'
+            echo 'Grafana dashboard: http://localhost:3000'
+            echo 'Graphite metrics: http://localhost:8080'
         }
         failure {
             echo 'Pipeline failed!'
-            // Send notification
-            emailext (
-                subject: "Pipeline FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                body: "Pipeline failed. Check Jenkins console for details.",
-                to: 'your-email@example.com'
-            )
+            echo 'Check the logs above for details.'
         }
     }
 } 

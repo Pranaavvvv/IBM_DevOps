@@ -1,297 +1,184 @@
 # Library Management System - DevOps CI/CD Pipeline
 
-A complete DevOps CI/CD pipeline project demonstrating the deployment of a Java-based Library Management System using modern DevOps tools and practices.
+A complete, certification-ready DevOps CI/CD pipeline project for a **Spring Boot Library Management System**. This project demonstrates modern DevOps practices using:
 
-## 🏗️ Project Overview
+- **GIT** (version control)
+- **Maven** (build tool)
+- **JUnit** (testing)
+- **Jenkins** (CI/CD)
+- **Docker** (containerization)
+- **Ansible** (deployment/configuration)
+- **Graphite + Grafana** (monitoring)
 
-This project showcases a full DevOps pipeline including:
-- **Java Maven Application** - Library Management System with addBook and hasBook functionality
-- **JUnit Testing** - Comprehensive unit tests
-- **Docker Containerization** - Multi-stage Docker build
-- **Jenkins CI/CD Pipeline** - Automated build, test, and deployment
-- **Terraform Infrastructure** - AWS EC2 provisioning
-- **Ansible Deployment** - Application deployment automation
-- **Graphite + Grafana Monitoring** - Metrics collection and visualization
+---
 
-## 📁 Project Structure
+## 📚 **Project Overview**
+
+This project implements a RESTful Library Management System with endpoints to add, check, and list books. The full DevOps pipeline automates build, test, containerization, deployment, and monitoring.
+
+---
+
+## 🏗️ **Project Structure**
 
 ```
 library-management-system/
 ├── src/
 │   ├── main/java/com/library/
-│   │   ├── Book.java              # Book entity
-│   │   ├── Library.java           # Main library logic
-│   │   └── LibraryApplication.java # Application entry point
+│   │   ├── Book.java
+│   │   ├── Library.java
+│   │   ├── LibraryApplication.java
+│   │   └── LibraryController.java
 │   └── test/java/com/library/
-│       ├── BookTest.java          # Book unit tests
-│       └── LibraryTest.java       # Library unit tests
-├── terraform/
-│   ├── main.tf                    # AWS infrastructure
-│   ├── variables.tf               # Terraform variables
-│   └── outputs.tf                 # Terraform outputs
+│       ├── BookTest.java
+│       ├── LibraryTest.java
+│       └── LibraryControllerTest.java
+├── pom.xml
+├── Dockerfile
+├── Jenkinsfile
 ├── ansible/
-│   └── deploy.yml                 # Ansible deployment playbook
+│   └── deploy.yml
 ├── monitoring/
-│   ├── docker-compose.yml         # Graphite + Grafana stack
-│   ├── graphite/conf/             # Graphite configuration
-│   └── grafana/                   # Grafana dashboards
-├── pom.xml                        # Maven configuration
-├── Dockerfile                     # Docker containerization
-├── Jenkinsfile                    # Jenkins CI/CD pipeline
-└── README.md                      # This file
+│   ├── docker-compose.yml
+│   └── ... (Graphite/Grafana configs)
+└── README.md
 ```
 
-## 🚀 Quick Start
+---
 
-### Prerequisites
+## 🚀 **Quick Start: Local Demo**
 
-1. **Java 11+** and **Maven 3.6+**
-2. **Docker** and **Docker Compose**
-3. **Jenkins** with required plugins
-4. **Terraform** 1.0+
-5. **Ansible** 2.9+
-6. **AWS CLI** configured
-7. **SSH key pair** for EC2 access
+### **Prerequisites**
+- Java 11+
+- Maven 3.6+
+- Docker Desktop (running)
+- (Optional) Jenkins (for full CI/CD demo)
 
-### 1. Build and Test Locally
-
+### **1. Build and Test the App**
 ```bash
-# Navigate to project directory
 cd library-management-system
-
-# Build the project
-mvn clean compile
-
-# Run tests
-mvn test
-
-# Package the application
-mvn package
-
-# Run the application
-java -jar target/library-management-system-1.0.0.jar
+mvn clean test
 ```
 
-### 2. Docker Operations
-
+### **2. Build and Run with Docker**
 ```bash
 # Build Docker image
 docker build -t library-management-system .
 
-# Run container locally
-docker run -p 8080:8080 library-management-system
-
-# Push to DockerHub (replace with your username)
-docker tag library-management-system your-username/library-management-system
-docker push your-username/library-management-system
+# Run the app container
+docker run -d --name library-app -p 8080:8080 library-management-system
 ```
 
-### 3. Infrastructure with Terraform
-
+### **3. Start Monitoring Stack**
 ```bash
-# Navigate to terraform directory
-cd terraform
-
-# Initialize Terraform
-terraform init
-
-# Plan the infrastructure
-terraform plan
-
-# Apply the infrastructure
-terraform apply
-
-# Get the EC2 public IP
-terraform output public_ip
-```
-
-### 4. Deploy with Ansible
-
-```bash
-# Navigate to ansible directory
-cd ansible
-
-# Deploy to EC2 (replace with actual IP)
-ansible-playbook -i "EC2_IP," -u ubuntu --private-key ~/.ssh/id_rsa deploy.yml \
-  -e "docker_image=your-username/library-management-system:latest"
-```
-
-### 5. Start Monitoring Stack
-
-```bash
-# Navigate to monitoring directory
 cd monitoring
-
-# Start Graphite and Grafana
 docker-compose up -d
-
-# Access Grafana at http://localhost:3000 (admin/admin)
-# Access Graphite at http://localhost:8080
 ```
+- **Grafana:** http://localhost:3000 (login: admin/admin)
+- **Graphite:** http://localhost:8080
 
-## 🔧 Configuration
+### **4. Interact with the REST API**
+- **Add a book:**
+  ```bash
+  curl -X POST http://localhost:8080/books \
+    -H "Content-Type: application/json" \
+    -d '{"isbn":"1234567890","title":"Test Book","author":"Test Author","year":2024}'
+  ```
+- **Check if a book exists:**
+  ```bash
+  curl http://localhost:8080/books/1234567890
+  ```
+- **List all books:**
+  ```bash
+  curl http://localhost:8080/books
+  ```
 
-### Jenkins Setup
-
-1. **Install Required Plugins:**
-   - Docker Pipeline
-   - Terraform
-   - Ansible
-   - Pipeline Utility Steps
-   - HTML Publisher
-
-2. **Configure Credentials:**
-   - `dockerhub-credentials` - DockerHub username/password
-   - `aws-credentials` - AWS access key/secret
-   - SSH key for EC2 access
-
-3. **Update Jenkinsfile:**
-   - Replace `your-dockerhub-username` with your DockerHub username
-   - Update email addresses in notifications
-   - Adjust AWS region if needed
-
-### AWS Configuration
-
-1. **Configure AWS CLI:**
+### **5. Stop Everything**
 ```bash
-aws configure
+docker stop library-app
+docker rm library-app
+cd monitoring
+docker-compose down
 ```
-
-2. **Create SSH Key Pair:**
-```bash
-ssh-keygen -t rsa -b 4096 -f ~/.ssh/id_rsa
-```
-
-3. **Update Terraform Variables:**
-   - Modify `terraform/variables.tf` for your region/instance type
-   - Ensure SSH public key path is correct
-
-### Monitoring Configuration
-
-1. **Graphite Configuration:**
-   - Metrics are sent to `localhost:2003`
-   - Web interface at `localhost:8080`
-
-2. **Grafana Configuration:**
-   - Default login: `admin/admin`
-   - Graphite datasource is pre-configured
-   - Library dashboard is automatically imported
-
-## 📊 Metrics and Monitoring
-
-The application collects the following metrics:
-
-- **library.books.added** - Counter for books added
-- **library.books.searched** - Counter for book searches
-- **library.addbook.duration** - Timer for add book operations
-- **library.searchbook.duration** - Timer for search operations
-
-### Viewing Metrics
-
-1. **Graphite Web Interface:** http://localhost:8080
-2. **Grafana Dashboard:** http://localhost:3000
-   - Login: admin/admin
-   - Navigate to Library Management System Dashboard
-
-## 🧪 Testing
-
-### Run All Tests
-```bash
-mvn test
-```
-
-### Run Specific Test Class
-```bash
-mvn test -Dtest=LibraryTest
-```
-
-### Generate Test Report
-```bash
-mvn surefire-report:report
-```
-
-## 🔄 CI/CD Pipeline Flow
-
-1. **Code Commit** → Git repository
-2. **Jenkins Trigger** → Pipeline starts
-3. **Build** → Maven compile and package
-4. **Test** → JUnit tests execution
-5. **Docker Build** → Create container image
-6. **Docker Push** → Push to DockerHub
-7. **Terraform Plan** → Infrastructure planning
-8. **Terraform Apply** → Provision AWS resources
-9. **Ansible Deploy** → Deploy application to EC2
-10. **Health Check** → Verify deployment
-11. **Notification** → Email success/failure
-
-## 🛠️ Troubleshooting
-
-### Common Issues
-
-1. **Maven Build Fails:**
-   - Ensure Java 11+ is installed
-   - Check Maven version: `mvn --version`
-   - Clear Maven cache: `mvn clean`
-
-2. **Docker Build Fails:**
-   - Ensure Docker is running
-   - Check Docker daemon: `docker info`
-   - Clear Docker cache: `docker system prune`
-
-3. **Terraform Errors:**
-   - Verify AWS credentials: `aws sts get-caller-identity`
-   - Check SSH key exists: `ls ~/.ssh/id_rsa.pub`
-   - Initialize Terraform: `terraform init`
-
-4. **Ansible Connection Issues:**
-   - Verify SSH key permissions: `chmod 600 ~/.ssh/id_rsa`
-   - Test SSH connection: `ssh -i ~/.ssh/id_rsa ubuntu@EC2_IP`
-   - Check security group allows SSH (port 22)
-
-5. **Monitoring Not Working:**
-   - Ensure Docker Compose is running
-   - Check container status: `docker-compose ps`
-   - View logs: `docker-compose logs`
-
-### Log Locations
-
-- **Application Logs:** Container logs via `docker logs`
-- **Jenkins Logs:** Jenkins console output
-- **Terraform Logs:** `terraform apply` output
-- **Ansible Logs:** Playbook execution output
-- **Monitoring Logs:** `docker-compose logs`
-
-## 📚 Learning Resources
-
-- [Maven Documentation](https://maven.apache.org/guides/)
-- [Docker Documentation](https://docs.docker.com/)
-- [Jenkins Pipeline Syntax](https://www.jenkins.io/doc/book/pipeline/syntax/)
-- [Terraform AWS Provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
-- [Ansible Documentation](https://docs.ansible.com/)
-- [Graphite Documentation](https://graphite.readthedocs.io/)
-- [Grafana Documentation](https://grafana.com/docs/)
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests for new functionality
-5. Ensure all tests pass
-6. Submit a pull request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 🆘 Support
-
-For issues and questions:
-1. Check the troubleshooting section
-2. Review the logs
-3. Create an issue with detailed information
-4. Include error messages and environment details
 
 ---
 
-**Happy DevOps Learning! 🚀** 
+## 🛠️ **CI/CD Pipeline (Jenkins)**
+
+The `Jenkinsfile` automates:
+1. **Checkout** (from GIT)
+2. **Build** (Maven)
+3. **Test** (JUnit)
+4. **Package** (Maven)
+5. **Docker Build**
+6. **Stop Previous Container**
+7. **Deploy Locally**
+8. **Health Check** (REST endpoint)
+9. **Start Monitoring** (Graphite + Grafana)
+
+**To run the pipeline:**
+- Set up a Jenkins job with this repo and the provided `Jenkinsfile`.
+- Make sure Jenkins can run Docker commands (run as admin or use Docker-in-Docker agent).
+
+---
+
+## 🤖 **Ansible Deployment**
+
+You can use Ansible to deploy the Dockerized app to any Linux host:
+```bash
+ansible-playbook -i "localhost," -c local ansible/deploy.yml
+```
+- Edit `docker_image` in the playbook if you push to DockerHub or use a remote host.
+
+---
+
+## 📊 **Monitoring with Graphite & Grafana**
+
+- **Graphite** collects metrics from the app (see `/monitoring/graphite/conf` for retention settings).
+- **Grafana** visualizes metrics (see `/monitoring/grafana/dashboards` for dashboards).
+- The app can be extended to push custom metrics to Graphite.
+
+---
+
+## 🧪 **Testing**
+
+- **Unit tests:** `mvn test` (JUnit)
+- **API tests:** `LibraryControllerTest.java` (Spring Boot MockMvc)
+
+---
+
+## 📝 **How to Demo for Certification**
+
+1. **Show the code and structure** (Spring Boot, Maven, Dockerfile, Jenkinsfile, Ansible, monitoring configs)
+2. **Run the pipeline** (locally or in Jenkins)
+3. **Show the REST API in action** (add/list/check books)
+4. **Show monitoring dashboards** (Grafana/Graphite)
+5. **Explain each DevOps tool's role**
+
+---
+
+## 🏆 **DevOps Tools Used**
+
+- **GIT:** Version control for all code and configs
+- **Maven:** Build, test, and package the Java app
+- **JUnit:** Automated unit and API tests
+- **Jenkins:** CI/CD pipeline automation
+- **Docker:** Containerization for consistent deployment
+- **Ansible:** Automated deployment/configuration
+- **Graphite + Grafana:** Monitoring and visualization
+
+---
+
+## 🆘 **Troubleshooting**
+
+- **Docker not running?** Start Docker Desktop and try again.
+- **Port 8080/3000 in use?** Stop other services or change ports in Dockerfile/compose.
+- **Jenkins can't run Docker?** Make sure Jenkins runs as admin or use a Docker agent.
+- **App not accessible?** Check `docker ps` and `docker logs library-app` for errors.
+
+---
+
+## 🎓 **Ready for Certification!**
+
+This project demonstrates a real-world DevOps CI/CD pipeline for a RESTful Java application, using all the required tools. You can run, demo, and explain every step for your certification.
+
+**Good luck! 🚀** 
